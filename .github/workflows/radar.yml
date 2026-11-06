@@ -1,0 +1,62 @@
+name: Revenue radar
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      notify:
+        description: 'Create a GitHub Issue digest for new signals (opt in)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: revenue-radar-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Scan public daily revenue data
+        run: python -m radar.cli --output out
+      - name: Add report to run summary
+        run: cat out/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: revenue-radar-report
+          path: out/
+          retention-days: 30
+
+  notify:
+    needs: scan
+    if: github.ref == 'refs/heads/main' && (vars.RADAR_CREATE_ISSUES == 'true' || inputs.notify == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: revenue-radar-report
+          path: out/
+      - name: Create one deduplicated issue digest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m radar.notify
