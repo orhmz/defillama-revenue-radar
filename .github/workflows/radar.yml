@@ -20,18 +20,18 @@ permissions:
 jobs:
   scan:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Scan public daily revenue data
         run: python -m radar.cli --output out
       - name: Add report to run summary
         run: cat out/report.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: revenue-radar-report
           path: out/
@@ -40,19 +40,19 @@ jobs:
   notify:
     needs: scan
     if: github.ref == 'refs/heads/main' && (vars.RADAR_CREATE_ISSUES == 'true' || inputs.notify == true)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: main
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: revenue-radar-report
           path: out/
