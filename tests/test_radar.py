@@ -1,8 +1,11 @@
 import unittest
+import json
 from datetime import date, datetime, timedelta, timezone
+from unittest.mock import patch
 
 from radar.core import DataError, analyze
 from radar.notify import digest
+from radar import notify
 
 
 TODAY = date(2026, 11, 7)
@@ -96,6 +99,27 @@ class RadarTests(unittest.TestCase):
         report["signals"] *= 21
         with self.assertRaises(ValueError):
             digest(report, set())
+
+    def test_notification_assigns_repository_owner(self):
+        report = {"as_of": "2026-11-06", "source": "https://example.test",
+                  "signals": [{"event_id": "first:3:2026-11-04", "type": "first_observed_revenue",
+                               "name": "New", "source_url": "https://defillama.com/fees/new",
+                               "first_positive_day": "2026-11-04", "observed_since_first_usd": 150,
+                               "as_of": "2026-11-06"}]}
+        sent = []
+
+        def record(url, token, *, payload=None):
+            sent.append(payload)
+            return {"html_url": "https://github.com/orhmz/defillama-revenue-radar/issues/1"}
+
+        with (patch.dict("os.environ", {"GITHUB_TOKEN": "test-token",
+                                        "GITHUB_REPOSITORY": "orhmz/defillama-revenue-radar"}),
+              patch("pathlib.Path.read_text", return_value=json.dumps(report)),
+              patch.object(notify, "known_events", return_value=set()),
+              patch.object(notify, "_request", side_effect=record),
+              patch("builtins.print")):
+            self.assertEqual(notify.main(), 0)
+        self.assertEqual(sent[0]["assignees"], ["orhmz"])
 
 
 if __name__ == "__main__":

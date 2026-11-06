@@ -84,7 +84,8 @@ def main() -> int:
         return 0
     title, body = result
     created = _request(f"https://api.github.com/repos/{repo}/issues", token,
-                       payload={"title": title, "body": body})
+                       payload={"title": title, "body": body,
+                                "assignees": [repo.split("/", 1)[0]]})
     print(f"Created digest issue: {created['html_url']}")
     return 0
 
