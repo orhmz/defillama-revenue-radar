@@ -13,7 +13,9 @@ Chain aggregates are excluded to avoid double counting. Missing protocol entries
 
 The [radar workflow](.github/workflows/radar.yml) runs daily at 06:17 UTC on the default branch. Each successful run adds a report to the Actions summary and stores `report.json` and `report.md` as a 30-day artifact. It can also be started manually.
 
-Notifications are **off by default**. To opt in for a single manual run, select the `notify` input. To opt in for scheduled runs, set repository variable `RADAR_CREATE_ISSUES` to `true`. The separate notification job has `issues: write` permission and creates at most one GitHub Issue digest per run, assigned to the repository owner so they are subscribed to the conversation. GitHub Mobile push delivery still depends on the owner's notification settings. It reads all open and closed issue event markers first, so reruns and repeated first-revenue observations do not resend the same event. More than 20 new signals fail closed without creating an issue. The scan job has read-only permission. No external messaging credentials are required or used.
+Notifications are enabled for scheduled and manual scans. The separate notification job has `issues: write` permission and creates at most one GitHub Issue digest per run, assigned to the repository owner. If no new qualifying signals are found, it creates no issue. GitHub Mobile push delivery depends on the owner's GitHub notification settings. The job checks all open and closed issue event markers to avoid duplicate first-revenue observations; more than 20 new signals fail closed without creating an issue. The scan job remains read-only. No external messaging credentials are required.
+
+**Limitations:** Signals are unverified DeFiLlama revenue observations, not confirmed on-chain first revenue or token-holder value accrual. The current filters are deliberately strict and may miss small or early projects. They should not be treated as independently verified investment opportunities.
 
 ## Run locally
 
