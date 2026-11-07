@@ -52,7 +52,9 @@ def known_events(repo: str, token: str) -> set[str]:
 
 def digest(report: dict, known: set[str]) -> tuple[str, str] | None:
     fresh = [signal for signal in report["signals"]
-             if signal["event_id"] not in known and signal.get("confidence") != "low"]
+             if signal["event_id"] not in known
+             and signal.get("confidence") != "low"
+             and signal.get("observation_kind") != "newly_observed_listing"]
     if not fresh:
         return None
     # Bound the digest without failing the workflow. Remaining candidates stay
@@ -64,11 +66,12 @@ def digest(report: dict, known: set[str]) -> tuple[str, str] | None:
     ))
     fresh = fresh[:MAX_NEW_SIGNALS]
     title = f"Revenue radar: {len(fresh)} new signal(s) through {report['as_of']} UTC"
-    lines = ["DeFiLlama revenue candidates (not independently verified on-chain). Low-confidence observations are retained in the report but not pushed.", ""]
+    lines = ["DeFiLlama revenue candidates (not independently verified on-chain). Low-confidence and newly listed observations are retained in the report but not pushed.", ""]
     for signal in fresh:
         if signal["type"] == "momentum":
             detail = (f"7d ${signal['current_7d_usd']:,.2f} vs prior "
-                      f"${signal['previous_7d_usd']:,.2f} ({signal['change_pct']:+.2f}%)")
+                      f"${signal['previous_7d_usd']:,.2f} ({signal['change_pct']:+.2f}%; "
+                      f"3d {signal.get('three_day_change_pct')}%; 14d {signal.get('fourteen_day_change_pct')}%)")
         else:
             detail = (f"first positive day {signal['first_positive_day']}; "
                       f"observed revenue ${signal['observed_since_first_usd']:,.2f} through {signal['as_of']}")
