@@ -99,13 +99,28 @@ def _momentum(series: dict[date, float], end: date) -> dict[str, float] | None:
             sum(value > 0 for value in current) < 4 or
             max(current) > current_total * 0.7):
         return None
+    # Independent confirmation windows. Missing observations remain unknown.
+    recent3 = _window(series, end, 3)
+    prior3 = _window(series, end - timedelta(days=3), 3)
+    recent14 = _window(series, end, 14)
+    prior14 = _window(series, end - timedelta(days=14), 14)
+    three_pct = (round((sum(recent3) / sum(prior3) - 1) * 100, 2)
+                 if recent3 is not None and prior3 is not None and sum(prior3) > 0 else None)
+    fourteen_pct = (round((sum(recent14) / sum(prior14) - 1) * 100, 2)
+                    if recent14 is not None and prior14 is not None and sum(prior14) > 0 else None)
+    # A rise that fails the short-term check is an observation, not a push alert.
+    confirmation = ("confirmed" if three_pct is not None and three_pct >= 0
+                    else "unconfirmed")
     return {
         "current_7d_usd": round(current_total, 2),
         "previous_7d_usd": round(previous_total, 2),
         "ratio": round(current_total / previous_total, 2),
         "change_usd": round(current_total - previous_total, 2),
         "change_pct": round(100 * (current_total / previous_total - 1), 2),
-        "confidence": ("low" if previous_total < 10 or current_total - previous_total < 10 else "medium"),
+        "three_day_change_pct": three_pct,
+        "fourteen_day_change_pct": fourteen_pct,
+        "confirmation": confirmation,
+        "confidence": ("low" if previous_total < 10 or current_total - previous_total < 10 or confirmation != "confirmed" else "medium"),
     }
 
 
@@ -147,9 +162,11 @@ def analyze(payload: dict[str, Any], *, today: date) -> dict[str, Any]:
                                 "event_id": f"first:{identifier}:{first.isoformat()}",
                                 "first_positive_day": first.isoformat(),
                                 "as_of": as_of.isoformat(),
+                                "first_day_usd": round(series[first], 2),
                                 "observed_since_first_usd": round(sum(observed_days), 2),
                                 "prior_observed_days": sum(day < first for day in series),
                                 "history_start": min(series).isoformat(),
+                                "observation_kind": ("possible_first_revenue" if any(day < first for day in series) else "newly_observed_listing"),
                                 "confidence": ("low" if sum(value > 0 for value in observed_days) < 2 or sum(observed_days) < 10 or not any(day < first for day in series) else "medium"),
                                 "evidence": "first observed in DeFiLlama; historical backfill or earlier on-chain activity not excluded"})
 
