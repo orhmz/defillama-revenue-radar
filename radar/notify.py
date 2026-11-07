@@ -55,8 +55,14 @@ def digest(report: dict, known: set[str]) -> tuple[str, str] | None:
              if signal["event_id"] not in known and signal.get("confidence") != "low"]
     if not fresh:
         return None
-    if len(fresh) > MAX_NEW_SIGNALS:
-        raise ValueError(f"{len(fresh)} new signals exceed the {MAX_NEW_SIGNALS} issue safety cap")
+    # Bound the digest without failing the workflow. Remaining candidates stay
+    # in the report and are eligible on the next run if still qualifying.
+    fresh.sort(key=lambda signal: (
+        signal.get("type") != "first_observed_revenue",
+        -signal.get("change_usd", signal.get("observed_since_first_usd", 0)),
+        signal["event_id"],
+    ))
+    fresh = fresh[:MAX_NEW_SIGNALS]
     title = f"Revenue radar: {len(fresh)} new signal(s) through {report['as_of']} UTC"
     lines = ["DeFiLlama revenue candidates (not independently verified on-chain). Low-confidence observations are retained in the report but not pushed.", ""]
     for signal in fresh:
