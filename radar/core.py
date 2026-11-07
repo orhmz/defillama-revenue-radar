@@ -94,17 +94,18 @@ def _momentum(series: dict[date, float], end: date) -> dict[str, float] | None:
     if current is None or previous is None:
         return None
     current_total, previous_total = sum(current), sum(previous)
-    if (previous_total < 100 or current_total < 1_000 or
-            current_total - previous_total < 1_000 or
-            current_total / previous_total < 2 or
-            sum(value > 0 for value in current) < 5 or
-            max(current) > current_total * 0.6):
+    if (previous_total <= 0 or current_total <= previous_total or
+            current_total / previous_total < 1.25 or
+            sum(value > 0 for value in current) < 4 or
+            max(current) > current_total * 0.7):
         return None
     return {
         "current_7d_usd": round(current_total, 2),
         "previous_7d_usd": round(previous_total, 2),
         "ratio": round(current_total / previous_total, 2),
         "change_usd": round(current_total - previous_total, 2),
+        "change_pct": round(100 * (current_total / previous_total - 1), 2),
+        "confidence": ("low" if previous_total < 10 or current_total - previous_total < 10 else "medium"),
     }
 
 
@@ -137,10 +138,10 @@ def analyze(payload: dict[str, Any], *, today: date) -> dict[str, Any]:
                              for i in range((as_of - first).days + 1)]
             # A first observation can be a newly tracked protocol. The signal
             # deliberately makes no claim about on-chain launch or prior activity.
-            if (as_of - timedelta(days=6) <= first <= as_of and
+            if (as_of - timedelta(days=13) <= first <= as_of and
                     all(value is not None for value in observed_days) and
-                    sum(value > 0 for value in observed_days) >= 2 and
-                    sum(observed_days) >= 100):
+                    sum(value > 0 for value in observed_days) >= 1 and
+                    sum(observed_days) > 0):
                 stats["first_revenue_candidates"] += 1
                 signals.append({**base, "type": "first_observed_revenue",
                                 "event_id": f"first:{identifier}:{first.isoformat()}",
@@ -148,7 +149,9 @@ def analyze(payload: dict[str, Any], *, today: date) -> dict[str, Any]:
                                 "as_of": as_of.isoformat(),
                                 "observed_since_first_usd": round(sum(observed_days), 2),
                                 "prior_observed_days": sum(day < first for day in series),
-                                "history_start": min(series).isoformat()})
+                                "history_start": min(series).isoformat(),
+                                "confidence": ("low" if sum(value > 0 for value in observed_days) < 2 or sum(observed_days) < 10 or not any(day < first for day in series) else "medium"),
+                                "evidence": "first observed in DeFiLlama; historical backfill or earlier on-chain activity not excluded"})
 
         if _window(series, as_of) is None or _window(series, as_of - timedelta(days=7)) is None:
             continue
