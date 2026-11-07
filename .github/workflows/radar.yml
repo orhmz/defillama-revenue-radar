@@ -39,7 +39,7 @@ jobs:
 
   notify:
     needs: scan
-    if: github.ref == 'refs/heads/main' && (vars.RADAR_CREATE_ISSUES == 'true' || inputs.notify == true)
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
