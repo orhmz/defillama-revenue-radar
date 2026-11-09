@@ -1,11 +1,13 @@
 import unittest
 import json
 from datetime import date, datetime, timedelta, timezone
+from io import BytesIO
 from unittest.mock import patch
+from zipfile import ZipFile
 
 from radar.core import DataError, analyze
 from radar.notify import digest
-from radar import notify
+from radar import checkpoint, notify
 
 
 TODAY = date(2026, 11, 7)
@@ -26,7 +28,7 @@ def fixture(*, days=30):
 
 
 class RadarTests(unittest.TestCase):
-    def test_momentum_uses_two_complete_windows_and_only_crossing_day(self):
+    def test_momentum_uses_complete_windows_and_keeps_one_event(self):
         data = fixture()
         for row in data["totalDataChartBreakdown"][-2:]:
             row[1]["Surge"] = 1000.0
@@ -42,7 +44,55 @@ class RadarTests(unittest.TestCase):
             {"Steady": 100.0, "Surge": 1000.0},
         ])
         next_report = analyze(data, today=date(2026, 11, 8))
-        self.assertFalse([x for x in next_report["signals"] if x["type"] == "momentum"])
+        next_signal = next(x for x in next_report["signals"] if x["type"] == "momentum")
+        self.assertEqual(next_signal["event_id"], momentum[0]["event_id"])
+        self.assertIsNone(digest(next_report, {momentum[0]["event_id"]}))
+
+    def test_momentum_rearms_after_two_complete_days_below_threshold(self):
+        for first_spike, second_spike, expected_start in ((-8, -2, -8), (-9, -3, 0)):
+            with self.subTest(first_spike=first_spike):
+                data = fixture()
+                chart = data["totalDataChartBreakdown"]
+                chart[first_spike - 1][1]["Surge"] = 1100
+                chart[second_spike - 1][1]["Surge"] = 1100
+                chart[-1][1]["Surge"] = 2200
+                report = analyze(data, today=TODAY)
+                signal = next(x for x in report["signals"] if x["type"] == "momentum")
+                self.assertEqual(signal["episode_start"], (END + timedelta(days=expected_start)).isoformat())
+                self.assertEqual(signal["confidence"], "medium")
+
+    def test_small_dollar_increase_stays_in_the_report(self):
+        data = fixture()
+        for row in data["totalDataChartBreakdown"][-4:]:
+            row[1]["Surge"] = 200
+        report = analyze(data, today=TODAY)
+        signal = next(x for x in report["signals"] if x["type"] == "momentum")
+        self.assertEqual(signal["change_usd"], 400)
+        self.assertEqual(signal["confidence"], "low")
+        self.assertIsNone(digest(report, set()))
+
+    def test_checkpoint_catches_a_missed_day_and_current_checkpoint_stays_quiet(self):
+        data = fixture()
+        data["totalDataChartBreakdown"][-8][1]["Surge"] = 1100
+        report = analyze(data, today=TODAY, after=END - timedelta(days=2))
+        self.assertEqual(report["processed_days"], ["2026-11-05", "2026-11-06"])
+        signal = next(x for x in report["signals"] if x["type"] == "momentum")
+        self.assertEqual(signal["as_of"], "2026-11-05")
+        self.assertIsNotNone(digest(report, set()))
+        self.assertIsNone(digest(report, {signal["event_id"]}))
+        current = analyze(data, today=TODAY, after=END)
+        self.assertEqual(current["processed_days"], [])
+        self.assertIsNone(digest(current, set()))
+
+    def test_checkpoint_rejects_gaps_and_regressions(self):
+        data = fixture()
+        data["totalDataChartBreakdown"].pop(-25)
+        with self.assertRaises(DataError):
+            analyze(data, today=TODAY, after=END - timedelta(days=5))
+        with self.assertRaises(DataError):
+            analyze(fixture(), today=TODAY, after=TODAY)
+        with self.assertRaises(DataError):
+            analyze(fixture(), today=TODAY + timedelta(days=1), require_latest=True)
 
     def test_missing_protocol_day_is_unknown_not_zero(self):
         data = fixture()
@@ -64,6 +114,20 @@ class RadarTests(unittest.TestCase):
         self.assertEqual(first[0]["event_id"], "first:3:2026-11-04")
         self.assertEqual(first[0]["observed_since_first_usd"], 150)
         self.assertEqual(first[0]["prior_observed_days"], 0)
+        self.assertIsNone(digest(analyze(data, today=TODAY), set()))
+
+    def test_first_revenue_needs_two_positive_days_and_one_hundred_dollars(self):
+        for values, should_alert in (((30, 60), False), ((0, 120), False), ((50, 50), True)):
+            with self.subTest(values=values):
+                data = fixture()
+                data["protocols"].append({"id": "3", "name": "New", "slug": "new",
+                                          "protocolType": "protocol"})
+                chart = data["totalDataChartBreakdown"]
+                for row, value in zip(chart[-3:], (0, *values)):
+                    row[1]["New"] = value
+                report = analyze(data, today=TODAY)
+                self.assertEqual(digest(report, set()) is not None, should_alert)
+                self.assertIsNone(digest(report, {"first:3:2026-11-04"}))
 
     def test_chain_aggregate_excluded_and_older_positive_prevents_first(self):
         data = fixture()
@@ -96,9 +160,27 @@ class RadarTests(unittest.TestCase):
         title, body = digest(report, set())
         self.assertIn("radar-event:first:3:2026-11-04", body)
         self.assertIn("1 new signal", title)
-        report["signals"] *= 21
-        with self.assertRaises(ValueError):
-            digest(report, set())
+        signal = report["signals"][0]
+        report["signals"] = [signal] * 21
+        title, body = digest(report, set())
+        self.assertIn("1 new signal", title)
+        self.assertEqual(body.count("radar-event:"), 1)
+        report["signals"] = [
+            {**signal, "event_id": f"first:{i}:2026-11-04"} for i in range(21)
+        ]
+        title, body = digest(report, set())
+        self.assertIn("20 new signal(s)", title)
+        self.assertEqual(body.count("radar-event:"), 20)
+
+    def test_legacy_marker_suppresses_the_same_momentum_episode(self):
+        data = fixture()
+        for row in data["totalDataChartBreakdown"][-5:]:
+            row[1]["Surge"] = 800
+        report = analyze(data, today=TODAY)
+        signal = next(x for x in report["signals"] if x["type"] == "momentum")
+        self.assertLess(signal["episode_start"], report["as_of"])
+        self.assertIsNone(digest(report, {f"momentum:2:{report['as_of']}"}))
+        self.assertIsNotNone(digest(report, {"momentum:2:2026-10-20"}))
 
     def test_notification_assigns_repository_owner(self):
         report = {"as_of": "2026-11-06", "source": "https://example.test",
@@ -120,6 +202,28 @@ class RadarTests(unittest.TestCase):
               patch("builtins.print")):
             self.assertEqual(notify.main(), 0)
         self.assertEqual(sent[0]["assignees"], ["orhmz"])
+
+
+class CheckpointTests(unittest.TestCase):
+    def test_restore_a_legacy_report_and_skip_unpublished_previews(self):
+        content = BytesIO()
+        with ZipFile(content, "w") as archive:
+            archive.writestr("report.json", json.dumps({"as_of": "2026-11-05"}))
+        replies = [
+            {"workflow_runs": [{"id": 30, "event": "workflow_dispatch"},
+                               {"id": 29, "event": "schedule"}]},
+            {"jobs": [{"name": "notify", "conclusion": "skipped"}]},
+            {"jobs": [{"name": "notify", "conclusion": "success"}]},
+            {"artifacts": [{"id": 50, "name": "revenue-radar-report", "expired": False}]},
+        ]
+        with (patch.object(checkpoint, "_request", side_effect=replies),
+              patch.object(checkpoint.urllib.request, "urlopen",
+                           return_value=BytesIO(content.getvalue())) as opened):
+            day = checkpoint.last_published_day("owner/repo", "token", today=TODAY)
+        self.assertEqual(day, date(2026, 11, 5))
+        request = opened.call_args.args[0]
+        self.assertTrue(request.full_url.endswith("/actions/artifacts/50/zip"))
+        self.assertEqual(request.unredirected_hdrs["Authorization"], "Bearer token")
 
 
 if __name__ == "__main__":
