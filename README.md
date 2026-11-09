@@ -4,18 +4,18 @@ This radar scans the public [DeFiLlama dailyRevenue overview](https://api.llama.
 
 ## Signals
 
-- **First observed revenue:** a protocol's first positive daily entry in the available DeFiLlama history is within the latest seven completed UTC days; all days from that entry to the scan date are present; at least two are positive; and their total is at least $100. A newly tracked protocol can qualify. This does **not** establish its launch date or first on-chain revenue.
-- **7-day momentum crossing:** the latest seven daily entries and the preceding seven are all present; prior revenue is at least $100; current revenue is at least $1,000 and at least $1,000 higher; growth is at least 2×; at least five current days are positive; and no single day contributes more than 60%. The previous rolling comparison must be complete and below this threshold, so an ongoing surge is not reported every day.
+- **First observed revenue.** A protocol qualifies for an alert after two positive completed UTC days totaling at least $100, with earlier observations in the feed and complete coverage since the first positive day. The first day must be within the latest 14 completed days of the evaluation. Newly tracked listings stay in the report for review. This is the first observation in DeFiLlama.
+- **7-day momentum.** Compare two complete, consecutive seven-day windows. An alert needs at least 25% growth and a $1,000 increase, a prior total of at least $10, at least four positive current days, and at most 70% of the current total from one day. The latest three days must also hold or improve relative to the preceding three. An episode starts after two complete comparisons below threshold and keeps one event ID across later observations.
 
-Chain aggregates are excluded to avoid double counting. Missing protocol entries are unknown, never zero. The scan fails if the global chart has recent date gaps or is more than two days old. Amounts are DeFiLlama's reported USD revenue; the radar does not verify token existence, token contracts, methodology, or on-chain activity.
+Chain aggregates are excluded to avoid double counting. Missing protocol entries remain unknown. Scheduled scans require the latest completed UTC day and fail if usable global data is missing across the period needed for the scan. Amounts reflect DeFiLlama's reported USD revenue. Independent confirmation of token contracts or on-chain payments requires separate evidence.
 
 ## Schedule and notifications
 
-The [radar workflow](.github/workflows/radar.yml) runs daily at 06:17 UTC on the default branch. Each successful run adds a report to the Actions summary and stores `report.json` and `report.md` as a 30-day artifact. It can also be started manually.
+The [radar workflow](.github/workflows/radar.yml) is scheduled daily at 06:17 UTC on the default branch. It restores the last published data day from the report of a successful notification job and evaluates each missed completed day in order. A new setup without an available checkpoint starts with the latest complete day. Each scan adds a summary and stores `report.json` and `report.md` for 30 days.
 
-Notifications are enabled for scheduled and manual scans. The separate notification job has `issues: write` permission and creates at most one GitHub Issue digest per run, assigned to the repository owner. If no new qualifying signals are found, it creates no issue. GitHub Mobile push delivery depends on the owner's GitHub notification settings. The job checks all open and closed issue event markers to avoid duplicate first-revenue observations; more than 20 new signals fail closed without creating an issue. The scan job remains read-only. No external messaging credentials are required.
+Scheduled scans can publish one digest of up to 20 eligible events, assigned to the repository owner. A manual scan with `notify=false` previews the report. A manual run on `main` can publish by setting `notify=true`. The notification job checks event markers in open and closed bot digests, including markers created by earlier versions. A run with zero new events completes quietly, and additional candidates stay in the report. GitHub Mobile push delivery depends on the owner's notification settings.
 
-**Limitations:** Signals are unverified DeFiLlama revenue observations, not confirmed on-chain first revenue or token-holder value accrual. The current filters are deliberately strict and may miss small or early projects. They should not be treated as independently verified investment opportunities.
+The published thresholds prioritize material changes. Smaller signals and newly observed listings remain available for review in Actions.
 
 ## Run locally
 

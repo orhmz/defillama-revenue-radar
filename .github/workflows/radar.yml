@@ -19,16 +19,23 @@ permissions:
 
 jobs:
   scan:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Check radar rules
+        run: python -m unittest discover -s tests -v
       - name: Scan public daily revenue data
-        run: python -m radar.cli --output out
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m radar.cli --output out --resume-github
       - name: Add report to run summary
         run: cat out/report.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v6
@@ -36,10 +43,11 @@ jobs:
           name: revenue-radar-report
           path: out/
           retention-days: 30
+          overwrite: true
 
   notify:
     needs: scan
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.notify))
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -47,8 +55,6 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: main
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'

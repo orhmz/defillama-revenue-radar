@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .checkpoint import last_published_day
 from .core import DataError, analyze
 
 
@@ -35,13 +37,15 @@ def fetch() -> dict:
 
 def markdown(report: dict) -> str:
     stats = report["stats"]
+    days = report.get("processed_days", [report["as_of"]])
     lines = [f"# Revenue radar — {report['as_of']} UTC", "",
+             f"Processed UTC days: {', '.join(days) or 'already current'}.", "",
              f"Scanned {stats['protocols']} entries; {stats['with_history']} had mapped history; "
              f"{stats['momentum_complete']} had complete 14-day protocol data.", "",
              "**Source:** [DeFiLlama dailyRevenue overview](https://api.llama.fi/overview/fees?dataType=dailyRevenue). "
              "Amounts are reported USD revenue. Token existence and on-chain activity were not independently verified.", ""]
     for kind, title in (("first_observed_revenue", "First observed revenue"),
-                        ("momentum", "7-day momentum crossing")):
+                        ("momentum", "7-day momentum observations")):
         matches = [signal for signal in report["signals"] if signal["type"] == kind]
         lines += [f"## {title} ({len(matches)})", ""]
         if not matches:
@@ -65,10 +69,19 @@ def markdown(report: dict) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=Path("out"))
+    parser.add_argument("--resume-github", action="store_true")
     args = parser.parse_args()
     try:
-        report = analyze(fetch(), today=datetime.now(timezone.utc).date())
-    except (DataError, ValueError, json.JSONDecodeError) as error:
+        today = datetime.now(timezone.utc).date()
+        after = None
+        if args.resume_github:
+            repo = os.environ.get("GITHUB_REPOSITORY")
+            token = os.environ.get("GITHUB_TOKEN")
+            if not repo or not token:
+                raise DataError("Missing GitHub workflow identity or token")
+            after = last_published_day(repo, token, today=today)
+        report = analyze(fetch(), today=today, after=after, require_latest=args.resume_github)
+    except (ValueError, KeyError, TypeError, urllib.error.URLError, TimeoutError) as error:
         print(f"Scan failed closed: {error}", file=sys.stderr)
         return 1
     args.output.mkdir(parents=True, exist_ok=True)
