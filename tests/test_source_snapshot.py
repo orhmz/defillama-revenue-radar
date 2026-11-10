@@ -38,7 +38,7 @@ class SourceSnapshotTests(unittest.TestCase):
             snapshot(data, source="https://example.test", today=TODAY,
                      fetched_at="2026-11-07T12:00:00+00:00")
         data = fixture(days=35)
-        data["totalDataChartBreakdown"].pop(-3)
+        data["totalDataChartBreakdown"].pop(-25)
         with self.assertRaisesRegex(DataError, "missing usable data"):
             snapshot(data, source="https://example.test", today=TODAY,
                      fetched_at="2026-11-07T12:00:00+00:00")
