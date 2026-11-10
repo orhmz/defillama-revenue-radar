@@ -44,6 +44,13 @@ def snapshot(payload: dict, *, source: str, today: date, fetched_at: str) -> dic
     days = [last_day - timedelta(days=offset) for offset in range(LOOKBACK_DAYS - 1, -1, -1)]
     recent = {day.isoformat() for day in days[-14:]}
     names = {item["name"] for item in protocols.values()}
+    usable_days = {datetime.fromtimestamp(timestamp, timezone.utc).date()
+                   for timestamp, values in payload["totalDataChartBreakdown"]
+                   if any(name in names and _number(value) is not None
+                          for name, value in values.items())}
+    missing_days = [day.isoformat() for day in days if day not in usable_days]
+    if missing_days:
+        raise DataError(f"Global chart is missing usable data for {missing_days[0]}")
     unmapped = sorted({name for timestamp, values in payload["totalDataChartBreakdown"]
                        if datetime.fromtimestamp(timestamp, timezone.utc).date().isoformat() in recent
                        for name in values if name not in names})
