@@ -1,0 +1,30 @@
+name: Revenue source coverage snapshot
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '43 5,11,17,23 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Check source validation rules
+        run: python -m unittest discover -s tests -q
+      - name: Fetch complete source snapshots
+        run: python -m radar.source_snapshot --output out/source_snapshot.json
+      - name: Preserve success or error evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: revenue-source-snapshot
+          path: out/source_snapshot.json
+          retention-days: 30

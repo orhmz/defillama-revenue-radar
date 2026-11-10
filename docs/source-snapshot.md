@@ -1,0 +1,9 @@
+# Audit-only DeFiLlama source snapshots
+
+Run `python -m radar.source_snapshot --output out/source_snapshot.json` or use the independent [source snapshot workflow](../.github/workflows/source-snapshot.yml). The worker reads four public DeFiLlama feeds: global Holders Revenue and Robinhood Chain Fees, Protocol Revenue, and Holders Revenue. It uses no API key and sends no notifications.
+
+The output records the fetch time and the last completed UTC data day separately. `daily_completed_utc` contains 30 closed days per product protocol, with `null` for unobserved days. `current_7d_usd` and `previous_7d_usd` exist only when their seven daily observations are all present. `rolling_at_fetch` contains the API's moving 24h/7d/30d totals; these are not interchangeable with closed UTC day windows. The coverage section counts all metadata rows, product protocols, protocols with any recent observation, and protocols with complete or incomplete 14-day windows. A source-validated capture is **not** a complete candidate scan or chain verification.
+
+The process exits with failure if any feed is inaccessible or stale, any global day needed for validation is absent, or a chart name in the last 14 completed days cannot be mapped to a protocol ID. The JSON is still written with `status=incomplete` and per-feed errors; the workflow preserves it as an artifact on failure. An absent individual protocol observation stays unknown and makes that protocol's affected comparison window incomplete.
+
+This artifact can support a later candidate evaluator. Before routing it to live alerts, compare candidate identity, closed-day trends, first-party token and product sources, and previous alert event IDs. The scheduled GitHub run may be delayed, so downstream readers must check `fetched_at_utc` and `last_completed_utc_day` instead of assuming the cron time proves freshness.
