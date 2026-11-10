@@ -192,7 +192,7 @@ class RadarTests(unittest.TestCase):
         self.assertIsNone(digest(report, {f"momentum:2:{report['as_of']}"}))
         self.assertIsNotNone(digest(report, {"momentum:2:2026-10-20"}))
 
-    def test_notification_assigns_repository_owner(self):
+    def test_notification_creates_audit_issue_without_second_push_channel(self):
         report = {"as_of": "2026-11-06", "source": "https://example.test",
                   "signals": [{"event_id": "first:3:2026-11-04", "type": "first_observed_revenue",
                                "name": "New", "source_url": "https://defillama.com/fees/new",
@@ -211,7 +211,8 @@ class RadarTests(unittest.TestCase):
               patch.object(notify, "_request", side_effect=record),
               patch("builtins.print")):
             self.assertEqual(notify.main(), 0)
-        self.assertEqual(sent[0]["assignees"], ["orhmz"])
+        self.assertNotIn("assignees", sent[0])
+        self.assertIn("radar-event:first:3:2026-11-04", sent[0]["body"])
 
 
 class CheckpointTests(unittest.TestCase):

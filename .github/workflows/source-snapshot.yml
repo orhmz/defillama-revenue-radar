@@ -2,6 +2,11 @@ name: Revenue source coverage snapshot
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/source-snapshot.yml'
+      - 'radar/source_snapshot.py'
   schedule:
     - cron: '43 5,11,17,23 * * *'
 
