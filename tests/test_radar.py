@@ -48,17 +48,27 @@ class RadarTests(unittest.TestCase):
         self.assertEqual(next_signal["event_id"], momentum[0]["event_id"])
         self.assertIsNone(digest(next_report, {momentum[0]["event_id"]}))
 
-    def test_momentum_rearms_after_two_complete_days_below_threshold(self):
-        for first_spike, second_spike, expected_start in ((-8, -2, -8), (-9, -3, 0)):
+    def test_momentum_keeps_one_event_through_short_dips_and_rearms_after_a_week(self):
+        # Two separated revenue rises remain one event until seven complete
+        # daily comparisons have fallen below the push threshold.
+        for first_spike, rearmed in ((-12, False), (-14, False), (-17, True)):
             with self.subTest(first_spike=first_spike):
-                data = fixture()
+                data = fixture(days=60)
                 chart = data["totalDataChartBreakdown"]
-                chart[first_spike - 1][1]["Surge"] = 1100
-                chart[second_spike - 1][1]["Surge"] = 1100
-                chart[-1][1]["Surge"] = 2200
+                for index in (first_spike, first_spike + 1):
+                    chart[index][1]["Surge"] = 650
+                for index in (-2, -1):
+                    chart[index][1]["Surge"] = 1300
                 report = analyze(data, today=TODAY)
                 signal = next(x for x in report["signals"] if x["type"] == "momentum")
-                self.assertEqual(signal["episode_start"], (END + timedelta(days=expected_start)).isoformat())
+                first_start = (END + timedelta(days=first_spike + 2)).isoformat()
+                prior_id = f"momentum:2:{first_start}"
+                if rearmed:
+                    self.assertEqual(signal["episode_start"], (END - timedelta(days=1)).isoformat())
+                    self.assertIsNotNone(digest(report, {prior_id}))
+                else:
+                    self.assertEqual(signal["event_id"], prior_id)
+                    self.assertIsNone(digest(report, {prior_id}))
                 self.assertEqual(signal["confidence"], "medium")
 
     def test_small_dollar_increase_stays_in_the_report(self):

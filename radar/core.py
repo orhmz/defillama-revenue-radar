@@ -12,6 +12,7 @@ FIRST_REVENUE_MIN_USD = 100
 MOMENTUM_MIN_BASE_USD = 10
 MOMENTUM_MIN_INCREASE_USD = 1_000
 MOMENTUM_MIN_RATIO = 1.25
+MOMENTUM_REARM_DAYS = 7
 
 
 class DataError(ValueError):
@@ -110,7 +111,7 @@ def _above_momentum_threshold(current: float, previous: float) -> bool:
 
 
 def _episode_start(series: dict[date, float], end: date) -> date | None:
-    """Find the first crossing since two complete comparisons below threshold."""
+    """Find the first crossing since a full week below the alert threshold."""
     start = end
     below = 0
     day = end
@@ -124,7 +125,7 @@ def _episode_start(series: dict[date, float], end: date) -> date | None:
             below = 0
         else:
             below += 1
-            if below == 2:
+            if below == MOMENTUM_REARM_DAYS:
                 return start
         day -= timedelta(days=1)
 

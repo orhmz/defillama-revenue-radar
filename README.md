@@ -5,7 +5,7 @@ This radar scans the public [DeFiLlama dailyRevenue overview](https://api.llama.
 ## Signals
 
 - **First observed revenue.** A protocol qualifies for an alert after two positive completed UTC days totaling at least $100, with earlier observations in the feed and complete coverage since the first positive day. The first day must be within the latest 14 completed days of the evaluation. Newly tracked listings stay in the report for review. This is the first observation in DeFiLlama.
-- **7-day momentum.** Compare two complete, consecutive seven-day windows. An alert needs at least 25% growth and a $1,000 increase, a prior total of at least $10, at least four positive current days, and at most 70% of the current total from one day. The latest three days must also hold or improve relative to the preceding three. An episode starts after two complete comparisons below threshold and keeps one event ID across later observations.
+- **7-day momentum.** Compare two complete, consecutive seven-day windows. An alert needs at least 25% growth and a $1,000 increase, a prior total of at least $10, at least four positive current days, and at most 70% of the current total from one day. The latest three days must also hold or improve relative to the preceding three. An episode starts after seven complete daily comparisons below threshold and keeps one event ID across later observations.
 
 Chain aggregates are excluded to avoid double counting. Missing protocol entries remain unknown. Scheduled scans require the latest completed UTC day and fail if usable global data is missing across the period needed for the scan. Amounts reflect DeFiLlama's reported USD revenue. Independent confirmation of token contracts or on-chain payments requires separate evidence.
 
